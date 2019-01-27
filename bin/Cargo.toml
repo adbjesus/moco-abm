@@ -1,0 +1,13 @@
+[package]
+name = "moco-abm"
+description = "MOCO - Anytime Behavior Model (moco-abm)"
+version = "0.1.0"
+authors = ["Alexandre D. Jesus <adbjesus@gmail.com>"]
+edition = "2018"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/adbjesus/moco-abm"
+
+[dependencies]
+clap = "2.32"
+moco_abm = { version = "0.1.0", path = "../lib" }
