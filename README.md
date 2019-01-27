@@ -9,7 +9,7 @@ This software provides both a binary and a library (see note) for an anytime beh
 Install the latest binary using `cargo` with:
 
 ```sh
-cargo install moco-abm-bin
+cargo install moco_abm
 ```
 
 or compile from source with:
