@@ -1,15 +1,15 @@
 [package]
 name = "moco_abm"
-description = "MOCO - Anytime Behavior Model (moco-abm)"
-version = "0.1.1"
+description = "MOCO - Anytime Behavior Model (moco_abm)"
+version = "0.1.2"
 authors = ["Alexandre D. Jesus <adbjesus@gmail.com>"]
 edition = "2018"
 license = "MIT"
-repository = "https://github.com/adbjesus/moco-abm"
+repository = "https://github.com/adbjesus/moco_abm"
 readme = "README.md"
 
 [[bin]]
-name = "moco-abm"
+name = "moco_abm"
 path = "src/main.rs"
 
 [dependencies]

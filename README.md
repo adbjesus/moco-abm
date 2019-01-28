@@ -1,4 +1,4 @@
-# Multi-Objective Combinatorial Optimization - Anytime Behavior Model (moco-abm)
+# Multi-Objective Combinatorial Optimization - Anytime Behavior Model (moco_abm)
 
 This software provides both a binary and a library (see note) for an anytime behavior model of multi-objective combinatorial optimization algorithms that, at each iteration, collect an efficient solution that maximizes the hypervolume contribution. It is assumed that all objective functions are to be maximized.
 
@@ -22,7 +22,7 @@ cargo build --release
 
 ```
 USAGE:
-    moco-abm [OPTIONS] -n <num>
+    moco_abm [OPTIONS] -n <num>
 
 FLAGS:
     -h, --help       Prints help information
