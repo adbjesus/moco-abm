@@ -1,48 +1,64 @@
-#[macro_use]
-extern crate clap;
+use moco_abm::model2d::{LinearSegment2D, Model2D, Scalar};
 
-extern crate moco_abm;
-
-use clap::{AppSettings, Arg};
-use moco_abm::model2d::{LinearSegment2D, Model2D};
-
+use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io::{self, Read};
-use std::path::PathBuf;
 
 fn main() {
     if let Err(e) = execute() {
-        eprintln!("Error: {}", e);
+        eprintln!("Error: {}\n", e);
+        eprintln!("{}", usage(&env::args().next().unwrap()));
+        std::process::exit(1);
     }
 }
 
+fn usage(program: &str) -> String {
+    format!(
+        "\
+Usage: 
+  {} n d r_1 r_2 ... r_d [file]
+
+Where:
+  n      Number of points to return. Must be greater than 0.
+  d      Number of dimensions. Currently only 2 is supported.
+  r_i    Value of the reference point on the i-th coordinate.
+  file   Optional argument for segments, otherwise read from stdin.\
+",
+        program
+    )
+}
+
 fn execute() -> Result<(), Box<dyn Error>> {
-    let matches = app_from_crate!()
-        .setting(AppSettings::AllowNegativeNumbers)
-        .arg(
-            Arg::with_name("num")
-                .help("number of points to retrieve")
-                .short("n")
-                .takes_value(true)
-                .required(true),
-        )
-        .arg(
-            Arg::with_name("file")
-                .help("file with piecewise approximation definition (stdin is used if not set)")
-                .short("f")
-                .takes_value(true),
-        )
-        .get_matches();
+    let mut args = env::args();
 
-    let n = validate_num(parse_num(matches.value_of("num").unwrap())?)?;
-    let f = parse_file(matches.value_of("file"))?;
-    let s = match f {
-        Some(f) => read_segments(f),
-        None => read_segments(io::stdin()),
-    }?;
+    let _ = args.next();
 
-    let mut m = Model2D::new(s)?;
+    let n = args
+        .next()
+        .ok_or("missing argument `n`")?
+        .parse::<usize>()?;
+
+    let d = args
+        .next()
+        .ok_or("missing argument `d`")?
+        .parse::<usize>()?;
+
+    let mut r: Vec<f64> = Vec::with_capacity(d);
+    for i in 0..d {
+        r.push(
+            args.next()
+                .ok_or(format!("missing argument `r_{}`", i + 1))?
+                .parse::<f64>()?,
+        )
+    }
+
+    let s = match args.next() {
+        Some(f) => read_segments(File::open(f)?)?,
+        None => read_segments(io::stdin())?,
+    };
+
+    let mut m = Model2D::new(s, r)?;
 
     println!("index\thv_contribution\thv_current\thv_relative\tpoint");
     for i in 1..(n + 1) {
@@ -53,7 +69,7 @@ fn execute() -> Result<(), Box<dyn Error>> {
             };
 
         println!(
-            "{}\t{}\t{}\t{}\t{},{}",
+            "{}\t{:.12}\t{:.12}\t{:.12}\t{:.12},{:.12}",
             i, hv_contribution, hv_current, hv_relative, point[0], point[1]
         );
     }
@@ -61,34 +77,9 @@ fn execute() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn parse_num(s: &str) -> Result<usize, impl Error> {
-    s.parse::<usize>()
-}
-
-fn parse_file(s: Option<&str>) -> Result<Option<File>, String> {
-    match s {
-        Some(s) => {
-            let p = PathBuf::from(&s);
-            if !p.exists() {
-                return Err(format!("<file> `{}` does not exist", s));
-            }
-            if !p.is_file() {
-                return Err(format!("<file> `{}` is not a file", s));
-            }
-            match File::open(s) {
-                Ok(f) => Ok(Some(f)),
-                Err(e) => {
-                    Err(format!("<file> `{}` could not be opened - {}", s, e))
-                }
-            }
-        }
-        None => Ok(None),
-    }
-}
-
-fn read_segments(
+fn read_segments<T: Scalar>(
     mut r: impl Read,
-) -> Result<Vec<LinearSegment2D>, Box<dyn Error>> {
+) -> Result<Vec<LinearSegment2D<T>>, Box<dyn Error>> {
     let mut buffer = String::new();
     r.read_to_string(&mut buffer)?;
 
@@ -97,30 +88,34 @@ fn read_segments(
     loop {
         let start = [
             match iter.next() {
-                Some(p) => p.parse::<f64>()?,
+                Some(s) => T::from_str_radix(s, 10)
+                    .ok()
+                    .ok_or("failed to parse coordinate data")?,
                 None => break,
             },
-            iter.next()
-                .ok_or("missing coordinate data")?
-                .parse::<f64>()?,
+            match iter.next() {
+                Some(s) => T::from_str_radix(s, 10)
+                    .ok()
+                    .ok_or("failed to parse coordinate data")?,
+                None => break,
+            },
         ];
         let end = [
-            iter.next()
-                .ok_or("missing coordinate data")?
-                .parse::<f64>()?,
-            iter.next()
-                .ok_or("missing coordinate data")?
-                .parse::<f64>()?,
+            match iter.next() {
+                Some(s) => T::from_str_radix(s, 10)
+                    .ok()
+                    .ok_or("failed to parse coordinate data")?,
+                None => break,
+            },
+            match iter.next() {
+                Some(s) => T::from_str_radix(s, 10)
+                    .ok()
+                    .ok_or("failed to parse coordinate data")?,
+                None => break,
+            },
         ];
         v.push(LinearSegment2D::new(start, end));
     }
 
     Ok(v)
-}
-
-fn validate_num(n: usize) -> Result<usize, &'static str> {
-    if n < 1 {
-        return Err("-n <num> option must be a positive integer");
-    }
-    Ok(n)
 }

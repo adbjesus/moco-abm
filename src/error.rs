@@ -4,6 +4,7 @@ pub enum ErrorKind {
     EmptyRegion,
     UnsortedSegment,
     UnsortedSegments,
+    WrongDimensions,
 }
 
 #[derive(Debug)]

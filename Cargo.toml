@@ -1,7 +1,7 @@
 [package]
 name = "moco_abm"
 description = "MOCO - Anytime Behavior Model (moco_abm)"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["Alexandre D. Jesus <adbjesus@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -13,4 +13,4 @@ name = "moco_abm"
 path = "src/main.rs"
 
 [dependencies]
-clap = "2.32"
+num-traits = "0.2"
