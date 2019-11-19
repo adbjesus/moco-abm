@@ -24,7 +24,7 @@ pub trait Scalar: Real + Debug + PartialOrd {
     }
 }
 
-impl<T: Real + Debug> Scalar for T {}
+impl<T: Real + Debug + PartialOrd> Scalar for T {}
 
 pub type Point2D<T> = [T; 2];
 
@@ -40,22 +40,13 @@ struct Region2D<T: Scalar> {
     chain: Vec<LinearSegment2D<T>>,
     reference: Point2D<T>,
     best_hv: T,
-    best_ind: usize,
     best_point: Point2D<T>,
-    best_location: PointLocation2D,
 }
 
 #[derive(Debug)]
 pub struct LinearSegment2D<T: Scalar> {
     start: Point2D<T>,
     end: Point2D<T>,
-}
-
-#[derive(Debug)]
-enum PointLocation2D {
-    Start,
-    Middle,
-    End,
 }
 
 impl<T: Scalar> Model2D<T> {
@@ -75,7 +66,6 @@ impl<T: Scalar> Model2D<T> {
         let mut hv = T::zero();
         if let Some(reg) = Region2D::new(s, r) {
             hv = hv + calculate_segments_hv(&reg.chain, &r);
-            // println!("{:#?}", reg);
             regions.push(reg);
         }
 
@@ -112,46 +102,48 @@ impl<T: Scalar> Model2D<T> {
             None => None,
         }
     }
+
+    pub fn solve(&mut self, n: usize) -> Vec<(Point2D<T>, T, T, T)> {
+        let mut v = Vec::with_capacity(n);
+        for _ in 0..n {
+            match self.get_next_point() {
+                Some(p) => v.push(p),
+                None => break,
+            }
+        }
+        return v;
+    }
 }
 
 impl<T: Scalar> Region2D<T> {
-    fn new(mut s: Vec<LinearSegment2D<T>>, r: Point2D<T>) -> Option<Self> {
-        if s.len() == 0 {
+    fn new(segs: Vec<LinearSegment2D<T>>, r: Point2D<T>) -> Option<Self> {
+        if segs.len() == 0 {
             return None;
         }
 
         let mut best_hv = T::zero();
-        let mut best_ind = 0;
         let mut best_point = [T::zero(), T::zero()];
-        let mut best_location = PointLocation2D::Start;
 
-        let mut remove = 0usize;
-        for i in 0..s.len() {
-            if let Some((tmp_hv, tmp_point, tmp_location)) =
-                s[i - remove].best_hv(r)
-            {
-                if tmp_hv > best_hv {
-                    best_hv = tmp_hv;
-                    best_ind = i;
-                    best_point = tmp_point;
-                    best_location = tmp_location;
+        let mut chain = Vec::new();
+
+        for mut s in segs.into_iter() {
+            if let Some((hv, p)) = s.best_hv(r) {
+                if hv > best_hv {
+                    best_hv = hv;
+                    best_point = p;
                 }
-            } else {
-                s.remove(i - remove);
-                remove += 1;
+                chain.push(s);
             }
         }
 
-        return if s.is_empty() {
+        return if chain.is_empty() {
             None
         } else {
             Some(Self {
-                chain: s,
+                chain: chain,
                 reference: r,
                 best_hv,
-                best_ind,
                 best_point,
-                best_location,
             })
         };
     }
@@ -165,40 +157,29 @@ impl<T: Scalar> Region2D<T> {
             return (None, None);
         }
 
-        let mut segments_above = Vec::with_capacity(self.best_ind + 1);
-        let mut segments_below =
-            Vec::with_capacity(self.chain.len() - self.best_ind + 1);
+        let mut segs_above = Vec::new();
+        let mut segs_below = Vec::new();
 
-        let mut chain_iter = self.chain.into_iter();
-        for _ in 0..self.best_ind {
-            segments_above.push(chain_iter.next().unwrap());
-        }
-
-        let s = chain_iter.next().unwrap();
-        match &self.best_location {
-            PointLocation2D::Start => segments_below.push(s),
-            PointLocation2D::End => segments_above.push(s),
-            PointLocation2D::Middle => {
-                segments_above
-                    .push(LinearSegment2D::new(s.start, self.best_point));
-                segments_below
-                    .push(LinearSegment2D::new(self.best_point, s.end));
+        for s in self.chain.into_iter() {
+            if s.end[0].le_epsilon(self.best_point[0]) {
+                segs_above.push(s);
+            } else if s.start[0].ge_epsilon(self.best_point[0]) {
+                segs_below.push(s);
+            } else {
+                segs_above.push(
+                    LinearSegment2D::new(s.start, self.best_point).unwrap(),
+                );
+                segs_below.push(
+                    LinearSegment2D::new(self.best_point, s.end).unwrap(),
+                );
             }
         }
 
-        for s in chain_iter {
-            segments_below.push(s);
-        }
+        let region_above =
+            Region2D::new(segs_above, [self.reference[0], self.best_point[1]]);
 
-        let region_above = Region2D::new(
-            segments_above,
-            [self.reference[0], self.best_point[1]],
-        );
-
-        let region_below = Region2D::new(
-            segments_below,
-            [self.best_point[0], self.reference[1]],
-        );
+        let region_below =
+            Region2D::new(segs_below, [self.best_point[0], self.reference[1]]);
 
         (region_above, region_below)
     }
@@ -230,14 +211,26 @@ impl<T: Scalar> PartialEq for Region2D<T> {
 }
 
 impl<T: Scalar> LinearSegment2D<T> {
-    pub fn new(start: Point2D<T>, end: Point2D<T>) -> Self {
-        Self { start, end }
+    pub fn new(
+        start: Point2D<T>,
+        end: Point2D<T>,
+    ) -> Result<Self, &'static str> {
+        if start[0] < end[0] && start[1] > end[1] {
+            Ok(Self {
+                start: start,
+                end: end,
+            })
+        } else if start[0] > end[0] && start[1] < end[1] {
+            Ok(Self {
+                start: end,
+                end: start,
+            })
+        } else {
+            Err("LinearSegment2D endpoints must be non-dominated")
+        }
     }
 
-    fn best_hv(
-        &mut self,
-        r: Point2D<T>,
-    ) -> Option<(T, Point2D<T>, PointLocation2D)> {
+    fn best_hv(&mut self, r: Point2D<T>) -> Option<(T, Point2D<T>)> {
         /* Calculate line equation */
         let m = (self.end[1] - self.start[1]) / (self.end[0] - self.start[0]);
         let b = self.end[1] - m * self.end[0];
@@ -263,61 +256,28 @@ impl<T: Scalar> LinearSegment2D<T> {
         let c = [(r[1] - b) / m - r[0], m * r[0] + b - r[1]];
 
         /* Find optimal point in the hypothenuse */
-        let u = [r[0] + c[0] / T::two(), r[1] + c[1] / T::two()];
+        let mut u = [r[0] + c[0] / T::two(), r[1] + c[1] / T::two()];
 
-        /* If point before start, set start */
+        /* Change optimal point if outside of the segment */
         if u[0].le_epsilon(self.start[0]) {
-            return Some((
-                (self.start[0] - r[0]) * (self.start[1] - r[1]),
-                [self.start[0], self.start[1]],
-                PointLocation2D::Start,
-            ));
+            u = self.start;
+        } else if u[0].ge_epsilon(self.end[0]) {
+            u = self.end;
         }
 
-        /* If point before start, set start */
-        if u[0].ge_epsilon(self.end[0]) {
-            return Some((
-                (self.end[0] - r[0]) * (self.end[1] - r[1]),
-                [self.end[0], self.end[1]],
-                PointLocation2D::End,
-            ));
-        }
+        let hv = (u[0] - r[0]) * (u[1] - r[1]);
 
-        /* Else set middle */
-        return Some((
-            (u[0] - r[0]) * (u[1] - r[1]),
-            [u[0], u[1]],
-            PointLocation2D::Middle,
-        ));
+        if hv < T::zero() {
+            return None;
+        } else {
+            return Some((hv, u));
+        }
     }
 }
 
 fn validate_segments<T: Scalar>(
     s: &Vec<LinearSegment2D<T>>,
 ) -> Result<(), Error> {
-    if s.len() == 0 {
-        return Err(Error::with_message(
-            ErrorKind::EmptyApproximation,
-            String::from("at least one segment is required"),
-        ));
-    }
-
-    for i in s {
-        if i.start[0].ge_epsilon(i.end[0]) || i.start[1].le_epsilon(i.end[1]) {
-            println!("{:?}", i);
-            println!("{:?}", i.start[0].ge_epsilon(i.end[0]));
-            println!("{:?}", i.start[0] > i.end[0]);
-            println!("{:?}", i.start[0].eq_epsilon(i.end[0]));
-            println!("{:?}", i.start[1].le_epsilon(i.end[1]));
-            return Err(Error::with_message(
-                ErrorKind::UnsortedSegment,
-                String::from(
-                    "Linearsegments needs to be sorted such that start[0] < end[0] && start[1] > end[1]"
-                ),
-            ));
-        }
-    }
-
     for i in 1..s.len() {
         if !s[i].start[0].ge_epsilon(s[i - 1].end[0])
             || !s[i].start[1].le_epsilon(s[i - 1].end[1])
