@@ -1,4 +1,4 @@
-use moco_abm::model2d::{LinearSegment2D, Model2D, Scalar};
+use moco_abm::model2d::{generate_segments, LinearSegment2D, Model2D, Scalar};
 
 use std::env;
 use std::error::Error;
@@ -64,7 +64,7 @@ fn execute() -> Result<(), Box<dyn Error>> {
         None => read_segments(io::stdin())?,
     };
 
-    let mut m = Model2D::new(s, r)?;
+    let mut m = Model2D::new(s, [r[0], r[1]])?;
     let points = m.solve(k);
 
     println!("hv_contribution\thv_current\thv_relative\tpoint");
@@ -76,29 +76,6 @@ fn execute() -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
-}
-
-fn generate_segments<T: Scalar>(
-    n: usize,
-    d: f64,
-) -> Result<Vec<LinearSegment2D<T>>, &'static str> {
-    if n < 1 || d <= 0f64 {
-        return Err("Invalid values of 'n' or 'd' to generate segments");
-    }
-    let step = std::f64::consts::PI / 2f64 / (n as f64);
-    let pi2 = std::f64::consts::PI / 2f64;
-    let pow = 2f64 / d;
-    let mut segs = Vec::new();
-    for i in 0..n {
-        let theta_s = (step * (i as f64)).max(0f64).min(pi2);
-        let theta_e = (step * ((i + 1) as f64)).max(0f64).min(pi2);
-        let y0_s = T::from(theta_s.sin().powf(pow)).unwrap();
-        let y1_s = T::from(theta_s.cos().powf(pow)).unwrap();
-        let y0_e = T::from(theta_e.sin().powf(pow)).unwrap();
-        let y1_e = T::from(theta_e.cos().powf(pow)).unwrap();
-        segs.push(LinearSegment2D::new([y0_s, y1_s], [y0_e, y1_e]).unwrap());
-    }
-    return Ok(segs);
 }
 
 fn read_segments<T: Scalar>(

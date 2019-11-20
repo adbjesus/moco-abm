@@ -52,14 +52,9 @@ pub struct LinearSegment2D<T: Scalar> {
 impl<T: Scalar> Model2D<T> {
     pub fn new(
         s: Vec<LinearSegment2D<T>>,
-        r: Vec<T>,
+        r: Point2D<T>,
     ) -> Result<Model2D<T>, Error> {
-        if r.len() != 2 {
-            return Err(Error::new(ErrorKind::WrongDimensions));
-        }
-
         validate_segments(&s)?;
-        // println!("{:#?}", s);
 
         let r = [r[0], r[1]];
         let mut regions = BinaryHeap::new();
@@ -304,4 +299,27 @@ fn calculate_segments_hv<T: Scalar>(
         r0 = i.end[0];
     }
     hv
+}
+
+pub fn generate_segments<T: Scalar>(
+    n: usize,
+    d: f64,
+) -> Result<Vec<LinearSegment2D<T>>, &'static str> {
+    if n < 1 || d <= 0f64 {
+        return Err("Invalid values of 'n' or 'd' to generate segments");
+    }
+    let step = std::f64::consts::PI / 2f64 / (n as f64);
+    let pi2 = std::f64::consts::PI / 2f64;
+    let pow = 2f64 / d;
+    let mut segs = Vec::new();
+    for i in 0..n {
+        let theta_s = (step * (i as f64)).max(0f64).min(pi2);
+        let theta_e = (step * ((i + 1) as f64)).max(0f64).min(pi2);
+        let y0_s = T::from(theta_s.sin().powf(pow)).unwrap();
+        let y1_s = T::from(theta_s.cos().powf(pow)).unwrap();
+        let y0_e = T::from(theta_e.sin().powf(pow)).unwrap();
+        let y1_e = T::from(theta_e.cos().powf(pow)).unwrap();
+        segs.push(LinearSegment2D::new([y0_s, y1_s], [y0_e, y1_e]).unwrap());
+    }
+    return Ok(segs);
 }
